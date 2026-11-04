@@ -1,0 +1,135 @@
+name: Deploy cPanel
+
+# Reusable cPanel deploy and live verification.
+#
+# 1. trigger: true  -> VersionControl/update (pull) then VersionControlDeployment/create
+#    on the cPanel Git repository ~/repositories/<cpanel-repo>. Needs secrets
+#    CPANEL_USER and CPANEL_PASSWORD.
+# 2. verify-url     -> poll until the URL answers HTTP 200 (60 s).
+# 3. live-base-url + live-files -> each live file must be byte-identical to
+#    the commit. This proves the deploy delivered this exact commit.
+#
+# Set trigger: false when the cPanel side pulls by itself and this workflow only
+# verifies. Callers own triggers and concurrency.
+on:
+  workflow_call:
+    inputs:
+      trigger:
+        type: boolean
+        default: true
+      cpanel-repo:
+        description: Directory name under ~/repositories on the cPanel host.
+        type: string
+        default: ""
+      branch:
+        type: string
+        default: main
+      host:
+        type: string
+        required: true
+      verify-url:
+        type: string
+        default: ""
+      live-base-url:
+        type: string
+        default: ""
+      live-files:
+        description: Space-separated paths, relative to the repo root and to live-base-url.
+        type: string
+        default: ""
+      runner:
+        type: string
+        default: instabox-medium
+      timeout-minutes:
+        type: number
+        default: 5
+    secrets:
+      CPANEL_USER:
+        required: false
+      CPANEL_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Pull and deploy through the cPanel API
+        if: inputs.trigger
+        env:
+          CPANEL_USER: ${{ secrets.CPANEL_USER }}
+          CPANEL_PASSWORD: ${{ secrets.CPANEL_PASSWORD }}
+          HOST: ${{ inputs.host }}
+          REPO: ${{ inputs.cpanel-repo }}
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CPANEL_USER" ] || [ -z "$CPANEL_PASSWORD" ] || [ -z "$REPO" ]; then
+            echo "::error::trigger needs secrets CPANEL_USER, CPANEL_PASSWORD and input cpanel-repo"; exit 1
+          fi
+          root="%2Fhome%2F${CPANEL_USER}%2Frepositories%2F${REPO}"
+          call() {
+            local resp status body
+            resp=$(curl -sS -w "\nHTTP_STATUS:%{http_code}" -u "$CPANEL_USER:$CPANEL_PASSWORD" "https://${HOST}:2083/execute/$1")
+            status=$(echo "$resp" | grep "HTTP_STATUS" | cut -d: -f2)
+            body=$(echo "$resp" | sed '/HTTP_STATUS/d')
+            echo "$1 -> HTTP $status"
+            echo "$body"
+            [ "$status" = "200" ] || { echo "::error::cPanel API returned HTTP $status"; exit 1; }
+            echo "$body" | grep -q '"status":1' || { echo "::error::cPanel API returned status != 1"; exit 1; }
+          }
+          call "VersionControl/update?repository_root=${root}&branch=${BRANCH}"
+          sleep 8
+          call "VersionControlDeployment/create?repository_root=${root}"
+          echo "cPanel deployment queued."
+
+      - name: Wait for HTTP 200
+        if: inputs.verify-url != ''
+        env:
+          URL: ${{ inputs.verify-url }}
+        run: |
+          set -uo pipefail
+          for i in $(seq 1 12); do
+            sleep 5
+            code=$(curl -s -o /dev/null -w "%{http_code}" "${URL}?cb=$(date +%s)" || echo "000")
+            if [ "$code" = "200" ]; then echo "Live site answers 200 after $((i*5))s."; exit 0; fi
+            echo "  $((i*5))s: HTTP $code"
+          done
+          echo "::error::${URL} did not answer 200 after 60s. Deploy failed."
+          exit 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: inputs.live-files != ''
+        with:
+          persist-credentials: false
+
+      - name: Compare live files with the commit
+        if: inputs.live-files != ''
+        env:
+          BASE: ${{ inputs.live-base-url }}
+          FILES: ${{ inputs.live-files }}
+        run: |
+          set -euo pipefail
+          [ -n "$BASE" ] || { echo "::error::live-files needs live-base-url"; exit 1; }
+          fail=0
+          for f in $FILES; do
+            # Inline substitution on purpose: a failed fetch counts as a mismatch
+            # and the loop still reports every file.
+            if [ "$(curl -sS --max-time 20 "${BASE}/${f}?cb=$(date +%s)" | sha256sum | cut -d' ' -f1)" = "$(sha256sum "$f" | cut -d' ' -f1)" ]; then
+              echo "$f: live matches the commit."
+            else
+              echo "::error::$f on the live site differs from the commit at ${GITHUB_SHA}."
+              fail=1
+            fi
+          done
+          if [ "$fail" -eq 1 ]; then
+            echo "::error::The live site does not serve this commit. Deploy manually in cPanel or investigate the cPanel Git auto-pull."
+            exit 1
+          fi
+          echo "Live site serves the latest commit."

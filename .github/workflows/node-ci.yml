@@ -1,0 +1,97 @@
+name: Node CI
+
+# Reusable CI for Node projects: install, lint, typecheck, test, build.
+# Each command input is optional; an empty input skips that step.
+# Callers own triggers, concurrency, and the job name. See docs/USAGE.md.
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner label. Default is the org self-hosted runner.
+        type: string
+        default: instabox-medium
+      timeout-minutes:
+        type: number
+        default: 15
+      node-version:
+        type: string
+        default: "22"
+      package-manager:
+        description: "npm, pnpm, or none (no install step, no cache)"
+        type: string
+        default: npm
+      pnpm-version:
+        description: Required when package-manager is pnpm.
+        type: string
+        default: ""
+      working-directory:
+        type: string
+        default: "."
+      install:
+        description: "Install command. Empty means npm ci, or pnpm install --frozen-lockfile. Ignored when package-manager is none."
+        type: string
+        default: ""
+      lint:
+        type: string
+        default: ""
+      typecheck:
+        type: string
+        default: ""
+      test:
+        type: string
+        default: ""
+      build:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          # Only npm uses the setup-node cache. pnpm is installed after Node.
+          cache: ${{ inputs.package-manager == 'npm' && 'npm' || '' }}
+          cache-dependency-path: ${{ inputs.package-manager == 'npm' && format('{0}/package-lock.json', inputs.working-directory) || '' }}
+          package-manager-cache: ${{ inputs.package-manager == 'npm' }}
+
+      - name: Install pnpm
+        if: inputs.package-manager == 'pnpm'
+        env:
+          PNPM_VERSION: ${{ inputs.pnpm-version }}
+        run: |
+          if [ -z "$PNPM_VERSION" ]; then echo "::error::pnpm-version is required when package-manager is pnpm"; exit 1; fi
+          npm install --global "pnpm@$PNPM_VERSION" --ignore-scripts
+
+      - name: Install dependencies
+        if: inputs.package-manager != 'none'
+        run: ${{ inputs.install || (inputs.package-manager == 'pnpm' && 'pnpm install --frozen-lockfile' || 'npm ci') }}
+
+      - name: Lint
+        if: inputs.lint != ''
+        run: ${{ inputs.lint }}
+
+      - name: Typecheck
+        if: inputs.typecheck != ''
+        run: ${{ inputs.typecheck }}
+
+      - name: Test
+        if: inputs.test != ''
+        run: ${{ inputs.test }}
+
+      - name: Build
+        if: inputs.build != ''
+        run: ${{ inputs.build }}
