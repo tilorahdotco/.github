@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest something new
+labels: ["feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is hard or missing today, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Wanted result
+      description: What should it do? Keep it to a few sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: agent-notes
+    attributes:
+      label: Agent notes
+      description: Optional. Detail for agents only, such as affected paths, design options, acceptance checks, or a plan. Humans can skip this field.
+    validations:
+      required: false

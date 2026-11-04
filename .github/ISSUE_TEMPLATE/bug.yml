@@ -1,0 +1,32 @@
+name: Bug report
+description: Something is broken
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Say what you did, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Short numbered steps. Add a screenshot or log if it helps.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or platform
+      description: App version, browser, OS, or device.
+    validations:
+      required: true
+  - type: textarea
+    id: agent-notes
+    attributes:
+      label: Agent notes
+      description: Optional. Detail for agents only, such as logs, suspected files, test commands, or a fix plan. Humans can skip this field.
+    validations:
+      required: false
