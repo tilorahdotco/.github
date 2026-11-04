@@ -1,0 +1,25 @@
+name: Chore / docs
+description: Maintenance, cleanup, or docs
+labels: ["chore"]
+body:
+  - type: textarea
+    id: what-needs-doing
+    attributes:
+      label: What needs doing?
+      description: Say what to change and why it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: The visible result that shows the work is finished.
+    validations:
+      required: true
+  - type: textarea
+    id: agent-notes
+    attributes:
+      label: Agent notes
+      description: Optional. Detail for agents only, such as affected paths, commands, or a step list. Humans can skip this field.
+    validations:
+      required: false
