@@ -8,6 +8,12 @@ on:
         description: lychee arguments, including the file globs to check.
         type: string
         default: "--verbose --no-progress '*.html' '*.md'"
+      root-dir:
+        description: >-
+          Directory that root-relative links (href="/x") resolve against, relative
+          to the repository root. Empty keeps lychee's default.
+        type: string
+        default: ""
       runner:
         type: string
         default: instabox-medium
@@ -28,4 +34,4 @@ jobs:
           persist-credentials: false
       - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
-          args: ${{ inputs.args }}
+          args: ${{ inputs.root-dir != '' && format('--root-dir {0}/{1} ', github.workspace, inputs.root-dir) || '' }}${{ inputs.args }}

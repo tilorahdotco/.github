@@ -15,7 +15,7 @@ jobs:
 | Workflow | What it does | Main inputs | Secrets |
 | --- | --- | --- | --- |
 | `node-ci.yml` | Jobs `Install`, then parallel `Lint`, `Typecheck`, `Test`, then `Build`. Empty input skips that job. | `node-version`, `package-manager`, `working-directory`, `install`, `lint`, `typecheck`, `test`, `build`, `runner` | none |
-| `links.yml` | Link check with lychee. | `args`, `runner` | none |
+| `links.yml` | Link check with lychee. | `args`, `root-dir`, `runner` | none |
 | `changes.yml` | Job `Changes`. Output `code` is `true` unless only ignored files changed. | `ignore`, `runner` | none |
 | `security.yml` | Parallel jobs `Secret scan` (gitleaks CLI) and `Dependency audit`. | `secret-scan`, `audit`, `audit-level`, `working-directory`, `runner` | none |
 | `deploy-cpanel.yml` | Job `Deploy` (cPanel Git pull), then `Verify live` (HTTP 200 and byte compare). | `trigger`, `cpanel-repo`, `branch`, `host` (required), `verify-url`, `live-base-url`, `live-files`, `runner` | `CPANEL_USER`, `CPANEL_PASSWORD` |
@@ -168,3 +168,16 @@ jobs:
 
 For a single package, drop the matrix and the `working-directory` line. The caller job is then one box named `CI`.
 When a caller job skips (docs-only), `gate` still passes and only `Changes`, `CI gate` and `Announce` run. `Deploy site` skips too, because `code` is not `true`.
+
+### Link check for static sites
+
+Root-relative links (`href="/about/"`) resolve against `root-dir`, a path relative to the repository root. Leave it empty for repositories without root-relative links.
+
+```yaml
+jobs:
+  links:
+    uses: tilorahdotco/.github/.github/workflows/links.yml@<sha>
+    with:
+      root-dir: .
+      args: --verbose --no-progress --exclude-mail '**/*.html'
+```
