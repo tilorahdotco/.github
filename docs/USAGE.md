@@ -139,8 +139,8 @@ jobs:
 
   deploy:
     name: Deploy site
-    needs: [gate]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.gate.result == 'success'
+    needs: [changes, gate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.gate.result == 'success' && needs.changes.outputs.code == 'true'
     uses: tilorahdotco/.github/.github/workflows/deploy-cpanel.yml@<sha>
     with:
       host: example.com
@@ -163,4 +163,4 @@ jobs:
 ```
 
 For a single package, drop the matrix and the `working-directory` line. The caller job is then one box named `CI`.
-When a caller job skips (docs-only), `gate` still passes and only `Changes`, `CI gate` and `Announce` run.
+When a caller job skips (docs-only), `gate` still passes and only `Changes`, `CI gate` and `Announce` run. `Deploy site` skips too, because `code` is not `true`.
