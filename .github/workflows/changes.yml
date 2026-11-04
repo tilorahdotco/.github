@@ -1,0 +1,81 @@
+name: Changes
+
+# Reusable change filter for docs-only skips. Output `code` is "true" when the
+# push or pull request touches any file that does not match `ignore`, and also
+# for workflow_dispatch, schedule, or when the range cannot be resolved.
+# Use it with a gate job so required checks always report. See docs/USAGE.md.
+on:
+  workflow_call:
+    inputs:
+      ignore:
+        description: >-
+          Newline-separated globs for files that do not need CI, for example
+          **/*.md and docs/**. Same syntax as paths-ignore for the common cases.
+        type: string
+        default: |
+          **/*.md
+          docs/**
+          .github/ISSUE_TEMPLATE/**
+          .github/pull_request_template.md
+      runner:
+        type: string
+        default: instabox-medium
+    outputs:
+      code:
+        description: '"true" when at least one changed file is not ignored.'
+        value: ${{ jobs.changes.outputs.code }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Changes
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Filter changed files
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          IGNORE: ${{ inputs.ignore }}
+        run: |
+          set -uo pipefail
+          emit() { echo "code=$1" >> "$GITHUB_OUTPUT"; echo "code=$1 ($2)"; exit 0; }
+          case "$EVENT" in
+            pull_request|pull_request_target) range=("$PR_BASE...$PR_HEAD") ;;
+            push)
+              if [ -z "$PUSH_BEFORE" ] || [ "$PUSH_BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+                emit true "no usable previous commit"
+              fi
+              range=("$PUSH_BEFORE" "$GITHUB_SHA") ;;
+            *) emit true "event $EVENT always runs" ;;
+          esac
+          files=$(git diff --name-only "${range[@]}") || emit true "diff failed"
+          [ -n "$files" ] || emit true "no changed files in range"
+          globs=()
+          while IFS= read -r g; do [ -n "${g// /}" ] && globs+=("$g"); done <<< "$IGNORE"
+          while IFS= read -r f; do
+            skip=false
+            for g in "${globs[@]}"; do
+              g="${g#\*\*/}"
+              # In [[ == ]] a star also matches a slash, so *.md matches docs/a/b.md.
+              # shellcheck disable=SC2053
+              if [[ "$f" == $g || "$f" == */$g ]]; then skip=true; break; fi
+            done
+            if [ "$skip" = false ]; then echo "needs CI: $f"; emit true "code change"; fi
+          done <<< "$files"
+          emit false "only ignored files changed"

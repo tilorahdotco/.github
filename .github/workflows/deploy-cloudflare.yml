@@ -1,6 +1,10 @@
 name: Deploy Cloudflare
 
-# Reusable Cloudflare Workers deploy with wrangler. Callers must use
+# Reusable Cloudflare Workers deploy with wrangler, shaped as two jobs:
+#   Build -> Deploy
+# Build packs the built workspace (without .git) as an artifact. Deploy ships
+# exactly that artifact and is the only job that sees the Cloudflare secrets.
+# Callers must use
 # workflow_dispatch (manual release) and set concurrency with
 # cancel-in-progress: false. Build-time public values can be passed in the
 # build command from the caller, for example:
@@ -44,7 +48,8 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  build:
+    name: Build
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     defaults:
@@ -70,6 +75,38 @@ jobs:
       - name: Check package
         if: inputs.check != ''
         run: ${{ inputs.check }}
+
+      - name: Pack workspace
+        run: tar --exclude=./.git -czf "$RUNNER_TEMP/workspace.tgz" .
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cloudflare-workspace
+          path: ${{ runner.temp }}/workspace.tgz
+          retention-days: 1
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy
+    needs: [build]
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: cloudflare-workspace
+          path: ${{ runner.temp }}/artifact
+
+      - name: Unpack workspace
+        run: tar -xzf "$RUNNER_TEMP/artifact/workspace.tgz"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          package-manager-cache: false
 
       - name: Deploy
         uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
