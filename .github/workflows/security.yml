@@ -1,6 +1,7 @@
 name: Security
 
-# Reusable secret scan (gitleaks CLI) and dependency audit.
+# Reusable security checks, shaped as two parallel jobs:
+#   Secret scan | Dependency audit
 # The gitleaks CLI is MIT licensed; the gitleaks GitHub Action needs a paid
 # license for organizations, so this workflow downloads the pinned binary.
 # On pull_request it scans only the PR commits; otherwise the full history.
@@ -40,6 +41,7 @@ env:
 
 jobs:
   secret-scan:
+    name: Secret scan
     if: inputs.secret-scan
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 10
@@ -71,6 +73,7 @@ jobs:
           "$RUNNER_TEMP/gitleaks" git --redact --no-banner --verbose "${range[@]}" .
 
   dependency-audit:
+    name: Dependency audit
     if: inputs.audit != 'none'
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 10

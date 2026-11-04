@@ -1,12 +1,13 @@
 name: Deploy cPanel
 
-# Reusable cPanel deploy and live verification.
+# Reusable cPanel deploy and live verification, shaped as two jobs:
+#   Deploy -> Verify live
 #
-# 1. trigger: true  -> VersionControl/update (pull) then VersionControlDeployment/create
+# Deploy (trigger: true)  -> VersionControl/update (pull) then VersionControlDeployment/create
 #    on the cPanel Git repository ~/repositories/<cpanel-repo>. Needs secrets
 #    CPANEL_USER and CPANEL_PASSWORD.
-# 2. verify-url     -> poll until the URL answers HTTP 200 (60 s).
-# 3. live-base-url + live-files -> each live file must be byte-identical to
+# Verify live, verify-url: poll until the URL answers HTTP 200 (60 s).
+# Verify live, live-base-url + live-files: each live file must be byte-identical to
 #    the commit. This proves the deploy delivered this exact commit.
 #
 # Set trigger: false when the cPanel side pulls by itself and this workflow only
@@ -54,6 +55,8 @@ permissions:
 
 jobs:
   deploy:
+    name: Deploy
+    if: inputs.trigger
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     defaults:
@@ -61,7 +64,6 @@ jobs:
         shell: bash
     steps:
       - name: Pull and deploy through the cPanel API
-        if: inputs.trigger
         env:
           CPANEL_USER: ${{ secrets.CPANEL_USER }}
           CPANEL_PASSWORD: ${{ secrets.CPANEL_PASSWORD }}
@@ -89,6 +91,17 @@ jobs:
           call "VersionControlDeployment/create?repository_root=${root}"
           echo "cPanel deployment queued."
 
+  verify:
+    name: Verify live
+    needs: [deploy]
+    # Deploy is skipped when trigger is false; verify still runs then.
+    if: ${{ !cancelled() && needs.deploy.result != 'failure' && (inputs.verify-url != '' || inputs.live-files != '') }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    defaults:
+      run:
+        shell: bash
+    steps:
       - name: Wait for HTTP 200
         if: inputs.verify-url != ''
         env:
