@@ -3,6 +3,8 @@ name: Changes
 # Reusable change filter for docs-only skips. Output `code` is "true" when the
 # push or pull request touches any file that does not match `ignore`, and also
 # for workflow_dispatch, schedule, or when the range cannot be resolved.
+# Globs are anchored at the repository root, like paths-ignore. Do not gate the
+# secret scan on this output: a docs-only change can still contain a secret.
 # Use it with a gate job so required checks always report. See docs/USAGE.md.
 on:
   workflow_call:
@@ -66,15 +68,24 @@ jobs:
           esac
           files=$(git diff --name-only "${range[@]}") || emit true "diff failed"
           [ -n "$files" ] || emit true "no changed files in range"
-          globs=()
-          while IFS= read -r g; do [ -n "${g// /}" ] && globs+=("$g"); done <<< "$IGNORE"
+          # Convert each glob to an anchored regex, like paths-ignore: "*" and "?"
+          # stay inside one path segment, "**/" matches zero or more directories,
+          # "**" matches anything. Other characters match literally.
+          to_re() {
+            printf '%s' "$1" | sed \
+              -e 's/[.+^$(){}|\\[]/\\&/g' \
+              -e 's|\*\*/|@@DIRS@@|g' -e 's|\*\*|@@ANY@@|g' \
+              -e 's|\*|[^/]*|g' -e 's|?|[^/]|g' \
+              -e 's|@@DIRS@@|(.*/)?|g' -e 's|@@ANY@@|.*|g'
+          }
+          res=()
+          while IFS= read -r g; do
+            [ -n "${g// /}" ] && res+=("^$(to_re "$g")$")
+          done <<< "$IGNORE"
           while IFS= read -r f; do
             skip=false
-            for g in "${globs[@]}"; do
-              g="${g#\*\*/}"
-              # In [[ == ]] a star also matches a slash, so *.md matches docs/a/b.md.
-              # shellcheck disable=SC2053
-              if [[ "$f" == $g || "$f" == */$g ]]; then skip=true; break; fi
+            for re in "${res[@]}"; do
+              if [[ "$f" =~ $re ]]; then skip=true; break; fi
             done
             if [ "$skip" = false ]; then echo "needs CI: $f"; emit true "code change"; fi
           done <<< "$files"

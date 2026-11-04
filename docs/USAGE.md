@@ -52,7 +52,9 @@ Rules:
 
 ### Docs-only skip
 
-Callers skip CI for documentation changes with `paths-ignore`:
+Callers skip CI and deploy workflows for documentation changes with `paths-ignore`.
+Never put `paths-ignore` on the security workflow: a docs-only change can still contain a secret,
+so the secret scan runs on every change.
 
 ```yaml
 on:
@@ -72,6 +74,8 @@ For a repository with required checks, do not use `paths-ignore` or `[skip ci]`.
 and let a `Changes` job decide. Skipped jobs then report as skipped, and the `CI gate` job reports success:
 
 - The caller needs only `permissions: contents: read`.
+- `Changes` gates CI and deploy. It never gates `Security`, which runs on every change.
+- `changes.yml` globs are anchored at the repository root like `paths-ignore`: `*` stays inside one directory, `**/` matches any depth, and `docs/**` does not match `src/docs/x.js`.
 - Do not require the nested check names (`ci / Lint`). When the caller job is skipped, those checks never exist. Require `CI gate` only.
 - `CI gate` uses `if: always()`, so it runs even when every check was skipped. It fails when any needed job failed or was cancelled.
 
@@ -119,8 +123,6 @@ jobs:
 
   security:
     name: Security
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
     uses: tilorahdotco/.github/.github/workflows/security.yml@<sha>
 
   gate:
