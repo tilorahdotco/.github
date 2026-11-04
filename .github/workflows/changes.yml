@@ -71,6 +71,7 @@ jobs:
           # Convert each glob to an anchored regex, like paths-ignore: "*" and "?"
           # stay inside one path segment, "**/" matches zero or more directories,
           # "**" matches anything. Other characters match literally.
+          # shellcheck disable=SC2016  # the sed script is literal on purpose
           to_re() {
             printf '%s' "$1" | sed \
               -e 's/[.+^$(){}|\\[]/\\&/g' \
