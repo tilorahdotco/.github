@@ -81,11 +81,11 @@ and let a `Changes` job decide. Skipped jobs then report as skipped, and the `CI
 
 ### Example caller
 
-Copy to `.github/workflows/pipeline.yml`. Replace `<sha>` with the full commit SHA of the shared workflows.
+Copy to `.github/workflows/ci.yml`. Replace `<sha>` with the full commit SHA of the shared workflows.
 The graph is `Changes` then `CI` and `Security` in parallel, then `CI gate`, then `Deploy`, then `Announce`.
 
 ```yaml
-name: Pipeline
+name: CI
 
 on:
   pull_request:
@@ -148,7 +148,9 @@ jobs:
       host: example.com
       cpanel-repo: example
       verify-url: https://example.com/
-    secrets: inherit
+    secrets:
+      CPANEL_USER: ${{ secrets.CPANEL_USER }}
+      CPANEL_PASSWORD: ${{ secrets.CPANEL_PASSWORD }}
 
   announce:
     name: Announce
