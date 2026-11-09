@@ -30,7 +30,15 @@ jobs:
         run: |
           set -euo pipefail
           tgz="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl -sSLo "$RUNNER_TEMP/$tgz" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$tgz"
+          # The release download URL can return 504 for hours while the API asset URL
+          # for the same file still works, so retry, then fall back to that.
+          get() { curl --fail --silent --show-error --location --retry 3 --retry-all-errors --retry-delay 5 "$@"; }
+          if ! get -o "$RUNNER_TEMP/$tgz" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$tgz"; then
+            echo "Release download failed for $tgz; trying the API asset URL" >&2
+            url="$(get "https://api.github.com/repos/rhysd/actionlint/releases/tags/v${ACTIONLINT_VERSION}" |
+              python3 -c 'import json, sys; print(next(a["url"] for a in json.load(sys.stdin)["assets"] if a["name"] == sys.argv[1]))' "$tgz")"
+            get -H 'Accept: application/octet-stream' -o "$RUNNER_TEMP/$tgz" "$url"
+          fi
           echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/$tgz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/$tgz" -C "$RUNNER_TEMP" actionlint
       - name: Lint workflows
