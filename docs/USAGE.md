@@ -207,9 +207,9 @@ permissions:
   issues: write
   id-token: write # GitHub's identity token, exchanged for a short-lived Anthropic token
 concurrency:
-  # Commands from people with write access share one queue per PR. Any other comment
-  # gets its own group, so it never replaces a queued command.
-  group: pr-agent-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name == 'issue_comment' && !(github.event.issue.pull_request && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) && (startsWith(github.event.comment.body, '/review') || startsWith(github.event.comment.body, '/ask') || startsWith(github.event.comment.body, '/improve'))) && github.event.comment.id || 'review' }}
+  # One review at a time per PR. Every comment gets its own group, so a command is
+  # never replaced by a later comment or event; a command can run beside a review.
+  group: pr-agent-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.comment.id || 'review' }}
   cancel-in-progress: false
 jobs:
   review:
