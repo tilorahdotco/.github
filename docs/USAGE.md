@@ -216,10 +216,9 @@ jobs:
 - Tokens act as the `pr-agents` service account and work only in the `pr-cicd`
   Anthropic workspace, which has its own spend limit. No repository needs an
   Anthropic secret.
-- The model is Claude Haiku 5.5 with adaptive thinking at medium effort; Sonnet 5.5
-  runs only when a Haiku call fails. Reviews are comments, so the small model is
-  enough. A repository's `.pr_agent.toml` can add `[pr_reviewer] extra_instructions`;
-  leave the model to this workflow so every repository stays on the same one.
+- Models default to Claude Opus 5.5 with Sonnet 5.5 as fallback, adaptive thinking
+  at high effort. A repository's `.pr_agent.toml` can override them and add
+  `[pr_reviewer] extra_instructions`.
 - A failed exchange fails the job with Anthropic's error type. The deny reason is
   in the Claude Console under Workload identity, History.
 
