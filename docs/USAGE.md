@@ -20,7 +20,7 @@ jobs:
 | `security.yml` | Parallel jobs `Secret scan` (gitleaks CLI) and `Dependency audit`. | `secret-scan`, `audit`, `audit-level`, `working-directory`, `runner` | none |
 | `deploy-cpanel.yml` | Job `Deploy` (cPanel Git pull), then `Verify live` (HTTP 200 and byte compare). | `trigger`, `cpanel-repo`, `branch`, `host` (required), `verify-url`, `live-base-url`, `live-files`, `runner` | `CPANEL_USER`, `CPANEL_PASSWORD` |
 | `deploy-cloudflare.yml` | Job `Build`, then `Deploy` (wrangler) from the built artifact. Manual release only. | `node-version`, `install`, `build`, `check`, `wrangler-version`, `command`, `runner` | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
-| `pr-agent.yml` | Job `PR-Agent`: AI review of each PR with PR-Agent on Claude, and `/review`, `/improve`, `/ask` comments. No stored key: it exchanges GitHub's identity token for a 15-minute Anthropic token. | `runner`, `timeout-minutes` | none |
+| `pr-agent.yml` | Job `PR-Agent`: AI review of each PR with PR-Agent on Claude (Opus 5.5 reviews, Haiku 5.5 for `/ask` and `/improve`), and `/review`, `/improve`, `/ask` comments. No stored key: it exchanges GitHub's identity token for a 15-minute Anthropic token. | `runner`, `timeout-minutes` | none |
 
 Rules:
 - Pin every `uses:` to a full commit SHA. Dependabot keeps the pins in this repository current.
@@ -216,9 +216,11 @@ jobs:
 - Tokens act as the `pr-agents` service account and work only in the `pr-cicd`
   Anthropic workspace, which has its own spend limit. No repository needs an
   Anthropic secret.
-- Models default to Claude Opus 5.5 with Sonnet 5.5 as fallback, adaptive thinking
-  at high effort. A repository's `.pr_agent.toml` can override them and add
-  `[pr_reviewer] extra_instructions`.
+- Reviews (automatic, or a `/review` comment) use Claude Opus 5.5 at high effort.
+  The `/ask` and `/improve` comment commands use Claude Haiku 5.5 at medium effort.
+  Sonnet 5.5 runs only when the chosen model fails. This workflow owns the model:
+  a repository's `.pr_agent.toml` adds `[pr_reviewer] extra_instructions` but should
+  not set `model`, or it would override the split.
 - A failed exchange fails the job with Anthropic's error type. The deny reason is
   in the Claude Console under Workload identity, History.
 

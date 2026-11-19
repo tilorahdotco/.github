@@ -13,8 +13,10 @@ name: PR-Agent review
 # No other workflow can mint a token, and fork PRs get no identity token.
 #
 # Callers own triggers and concurrency, and must grant `id-token: write`.
-# Models default to Claude Opus 5.5 with Sonnet 5.5 as fallback; a repository's
-# `.pr_agent.toml` can override them and add review instructions. See docs/USAGE.md.
+# Models (PB, 2026-11-19): reviews, automatic or `/review`, use Claude Opus 5.5 at
+# high effort; the `/ask` and `/improve` comment commands use Claude Haiku 5.5 at
+# medium effort. Sonnet 5.5 runs only when the chosen model fails. This workflow owns
+# the model; a repository's `.pr_agent.toml` adds review instructions. See docs/USAGE.md.
 on:
   workflow_call:
     inputs:
@@ -86,10 +88,10 @@ jobs:
           # LiteLLM sends an `sk-ant-oat` token as `Authorization: Bearer`.
           ANTHROPIC.KEY: ${{ env.ANTHROPIC_WIF_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
-          CONFIG.MODEL: anthropic/claude-opus-5-5
+          CONFIG.MODEL: ${{ (startsWith(github.event.comment.body, '/ask') || startsWith(github.event.comment.body, '/improve')) && 'anthropic/claude-haiku-5-5' || 'anthropic/claude-opus-5-5' }}
           CONFIG.FALLBACK_MODELS: '["anthropic/claude-sonnet-5-5"]'
           CONFIG.ENABLE_CLAUDE_ADAPTIVE_THINKING: "true"
-          CONFIG.REASONING_EFFORT: high
+          CONFIG.REASONING_EFFORT: ${{ (startsWith(github.event.comment.body, '/ask') || startsWith(github.event.comment.body, '/improve')) && 'medium' || 'high' }}
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "false" # the PR template is the description
           github_action_config.auto_improve: "false"
