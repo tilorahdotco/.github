@@ -20,6 +20,7 @@ jobs:
 | `security.yml` | Parallel jobs `Secret scan` (gitleaks CLI) and `Dependency audit`. | `secret-scan`, `audit`, `audit-level`, `working-directory`, `runner` | none |
 | `deploy-cpanel.yml` | Job `Deploy` (cPanel Git pull), then `Verify live` (HTTP 200 and byte compare). | `trigger`, `cpanel-repo`, `branch`, `host` (required), `verify-url`, `live-base-url`, `live-files`, `runner` | `CPANEL_USER`, `CPANEL_PASSWORD` |
 | `deploy-cloudflare.yml` | Job `Build`, then `Deploy` (wrangler) from the built artifact. Manual release only. | `node-version`, `install`, `build`, `check`, `wrangler-version`, `command`, `runner` | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
+| `pr-agent.yml` | Job `PR-Agent`: AI review of each PR with PR-Agent on Claude, and `/review`, `/improve`, `/ask` comments. No stored key: it exchanges GitHub's identity token for a 15-minute Anthropic token. | `runner`, `timeout-minutes` | none |
 
 Rules:
 - Pin every `uses:` to a full commit SHA. Dependabot keeps the pins in this repository current.
@@ -181,3 +182,43 @@ jobs:
       root-dir: .
       args: --verbose --no-progress --exclude-mail '**/*.html'
 ```
+
+## PR-Agent review
+
+Copy this caller to `.github/workflows/pr-agent.yml` in the repository. The file
+name matters: the Anthropic federation rule accepts tokens only for a caller at
+that path, running this workflow, in a `tilorahdotco` repository, on a
+`pull_request` or `issue_comment` event.
+
+```yaml
+name: PR-Agent review
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write # GitHub's identity token, exchanged for a short-lived Anthropic token
+concurrency:
+  group: pr-agent-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+jobs:
+  review:
+    name: PR-Agent review
+    uses: tilorahdotco/.github/.github/workflows/pr-agent.yml@<commit-sha>
+    with:
+      runner: ${{ vars.LIGHT_RUNNER || 'instabox-small' }} # public repositories: ubuntu-latest
+```
+
+- Tokens act as the `pr-agents` service account and work only in the `pr-cicd`
+  Anthropic workspace, which has its own spend limit. No repository needs an
+  Anthropic secret.
+- Models default to Claude Opus 5.5 with Sonnet 5.5 as fallback, adaptive thinking
+  at high effort. A repository's `.pr_agent.toml` can override them and add
+  `[pr_reviewer] extra_instructions`.
+- A failed exchange fails the job with Anthropic's error type. The deny reason is
+  in the Claude Console under Workload identity, History.
+
