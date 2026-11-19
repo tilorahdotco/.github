@@ -7,16 +7,21 @@ name: PR-Agent review
 #
 # The federation rule `pr-agent-org` accepts a token only when all of these hold:
 #   - the repository owner is tilorahdotco (owner id 350058761);
-#   - the running job is this workflow (`job_workflow_ref`);
+#   - the running job is this workflow at `refs/heads/main` of this repository
+#     (`job_workflow_ref`), so a copy on another branch, commit or fork gets nothing;
 #   - the caller file is the repository's `.github/workflows/pr-agent.yml`;
 #   - the event is `pull_request` or `issue_comment`.
-# No other workflow can mint a token, and fork PRs get no identity token.
+# Callers must therefore use `@main`, not a commit SHA: the one exception to the
+# pin rule in docs/USAGE.md. Only organization owners can push to `main` here.
+# Fork PR events get no identity token and are skipped below.
 #
 # Callers own triggers and concurrency, and must grant `id-token: write`.
 # Models (PB, 2026-11-19): reviews, automatic or `/review`, use Claude Opus 5.5 at
 # high effort; the `/ask` and `/improve` comment commands use Claude Haiku 5.5 at
 # medium effort. Sonnet 5.5 runs only when the chosen model fails. This workflow owns
-# the model; a repository's `.pr_agent.toml` adds review instructions. See docs/USAGE.md.
+# the model: these settings win over a `model` in a repository's `.pr_agent.toml`, which
+only adds review instructions. Other PR-Agent commands and `--config.` arguments in a
+comment are not run. See docs/USAGE.md.
 on:
   workflow_call:
     inputs:
@@ -31,15 +36,19 @@ on:
 jobs:
   review:
     name: PR-Agent
-    # PR events from this repository (not forks or drafts), or `/` commands on a PR
-    # from people with write access to it.
+    # PR events from this repository (not forks or drafts), or a `/review`, `/ask` or
+    # `/improve` comment on a PR from people with write access to it. A comment with a
+    # `--config.` argument is skipped, so nobody changes the model from a comment.
     if: >-
       (github.event_name == 'pull_request'
         && github.event.pull_request.head.repo.full_name == github.repository
         && !github.event.pull_request.draft)
       || (github.event_name == 'issue_comment'
         && github.event.issue.pull_request
-        && startsWith(github.event.comment.body, '/')
+        && (startsWith(github.event.comment.body, '/review')
+          || startsWith(github.event.comment.body, '/ask')
+          || startsWith(github.event.comment.body, '/improve'))
+        && !contains(github.event.comment.body, '--config.')
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
@@ -83,7 +92,11 @@ jobs:
           echo "::add-mask::$token"
           echo "ANTHROPIC_WIF_TOKEN=$token" >> "$GITHUB_ENV"
       - name: Run PR-Agent
-        uses: The-PR-Agent/pr-agent@e673a02076ce09a4726c3d0c3cc85780e59ca52b # v0.50.0
+        # PR-Agent v0.50.0, the `0.50.0-github_action` image by digest. The action
+        # repository only wraps a rolling image tag, so the digest is the real pin
+        # (PR-Agent SECURITY.md). To upgrade, take the digest of the new
+        # `<version>-github_action` tag on Docker Hub.
+        uses: docker://pragent/pr-agent@sha256:548e894a88071180832b2f4233f734d0acd0db1a879e2fcbaa70bac8b8372ebe
         env:
           # LiteLLM sends an `sk-ant-oat` token as `Authorization: Bearer`.
           ANTHROPIC.KEY: ${{ env.ANTHROPIC_WIF_TOKEN }}
