@@ -222,6 +222,9 @@ jobs:
       runner: instabox-small # public repositories: ubuntu-latest
 ```
 
+- A repository that requires SHA pins (intersects) cannot use `@main`. It pins the
+  commit of this workflow instead, and that exact commit must be listed in the
+  rule's condition (Claude Console, Workload identity, rule `pr-agent-org`).
 - Tokens act as the `pr-agents` service account and work only in the `pr-cicd`
   Anthropic workspace, which has its own spend limit. No repository needs an
   Anthropic secret.
@@ -232,7 +235,7 @@ jobs:
   `[pr_reviewer] extra_instructions`. No other PR-Agent command runs.
 - A fork PR gets no automatic review. A maintainer's `/review` comment on it runs
   from the default branch and reviews it; PR-Agent reads the diff and runs no PR code.
-- The PR-Agent image is pinned by digest in the workflow. Use a runner with Docker:
+- The PR-Agent image is pinned by digest in the org action `actions/pr-agent`, which the workflow pins by commit. Use a runner with Docker:
   instabox or GitHub-hosted, not the `cjbb2-ci` fallback runner.
 - A failed exchange fails the job with Anthropic's error type. The deny reason is
   in the Claude Console under Workload identity, History.

@@ -1,0 +1,10 @@
+name: PR-Agent (pinned image)
+description: >-
+  Runs PR-Agent v0.50.0 from its `0.50.0-github_action` image by digest. The upstream
+  action only wraps a rolling image tag, so the digest is the real pin (PR-Agent
+  SECURITY.md). It lives in this repository so that repositories that allow only
+  listed actions and require SHA pins can run it. To upgrade, take the digest of the
+  new `<version>-github_action` tag on Docker Hub. Settings come from the step's env.
+runs:
+  using: docker
+  image: docker://pragent/pr-agent@sha256:548e894a88071180832b2f4233f734d0acd0db1a879e2fcbaa70bac8b8372ebe
