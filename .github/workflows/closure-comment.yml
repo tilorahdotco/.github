@@ -60,6 +60,15 @@ jobs:
             *"[bot]") echo "skip: closed by $CLOSER"; exit 0 ;;
           esac
 
+          # Skip a superseded event: if the item was reopened, or closed again later, since
+          # this closure, a newer run owns the newer state. Without this, a delayed run could
+          # reopen someone else's valid closure.
+          current=$(gh api "repos/$REPO/issues/$NUMBER" --jq '[.state, (.closed_at // "")] | join(" ")')
+          if [ "$current" != "closed $CLOSED_AT" ]; then
+            echo "skip: state is now '$current', not the closure at $CLOSED_AT"
+            exit 0
+          fi
+
           if [ "$KIND" = "issue" ]; then
             # Closed by a merged pull request or a commit: the PR is the record. Ask GraphQL
             # for the closer: the REST timeline leaves commit_id and source empty when a
