@@ -1,0 +1,131 @@
+name: Closure needs a comment
+
+# Reusable. Every closure needs a comment with the outcome. If an issue or an
+# unmerged pull request is closed without one, this reopens it and asks the closer
+# to comment. Comment of 10 or more characters (not counting spaces) by the closer,
+# from 30 minutes before the closure on, counts.
+#
+# Skipped (no reopen): closures by bots, issues closed by a merged pull request or
+# a commit, and an issue closed by a tracker sync within 5 minutes after a merged
+# pull request that mentions it. Merged pull requests are never checked.
+#
+# Uses only API calls (gh and jq). It checks out no code, so it is safe on events
+# from forks. The caller owns triggers; see docs/USAGE.md.
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner label. Empty uses the LIGHT_RUNNER variable, then instabox-small. Public repositories must pass a GitHub-hosted runner.
+        type: string
+        default: ''
+      contributing-link:
+        description: Where the closure rules are written (a file name or URL). Shown in the reopen comment.
+        type: string
+        default: CONTRIBUTING.md
+      timeout-minutes:
+        type: number
+        default: 3
+
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+
+jobs:
+  check:
+    name: Closure needs a comment
+    if: github.event_name == 'issues' || (github.event_name == 'pull_request' && github.event.pull_request.merged == false)
+    runs-on: ${{ inputs.runner || vars.LIGHT_RUNNER || 'instabox-small' }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - name: Require a closing comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          KIND: ${{ github.event_name == 'issues' && 'issue' || 'pr' }}
+          CLOSER: ${{ github.event.sender.login }}
+          CLOSED_AT: ${{ github.event.issue.closed_at || github.event.pull_request.closed_at }}
+          GUIDE: ${{ inputs.contributing-link }}
+        run: |
+          set -euo pipefail
+
+          : "${REPO:?}" "${NUMBER:?}" "${KIND:?}" "${CLOSER:?}" "${CLOSED_AT:?}"
+          [[ "$NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "bad number"; exit 1; }
+
+          # Bots (including this workflow) and GitHub itself are not asked for a comment.
+          case "$CLOSER" in
+            *"[bot]") echo "skip: closed by $CLOSER"; exit 0 ;;
+          esac
+
+          if [ "$KIND" = "issue" ]; then
+            # Closed by a merged pull request or a commit: the PR is the record. Ask GraphQL
+            # for the closer: the REST timeline leaves commit_id and source empty when a
+            # squash-merged PR closes an issue, which would reopen issues the PR just closed.
+            # shellcheck disable=SC2016  # "$owner" etc. are GraphQL variables
+            closer=$(gh api graphql \
+              -f query='query($owner: String!, $name: String!, $number: Int!) {
+                repository(owner: $owner, name: $name) { issue(number: $number) {
+                  timelineItems(itemTypes: CLOSED_EVENT, last: 1) { nodes { ... on ClosedEvent {
+                    closer { __typename ... on PullRequest { merged } } } } } } } }' \
+              -f owner="${REPO%%/*}" -f name="${REPO#*/}" -F number="$NUMBER" \
+              --jq '.data.repository.issue.timelineItems.nodes[0].closer
+                | if . == null then "person"
+                  elif .__typename == "Commit" or (.__typename == "PullRequest" and .merged) then "change"
+                  else "person" end')
+            if [ "$closer" = "change" ]; then
+              echo "ok: closed by a commit or pull request"
+              exit 0
+            fi
+            # A PR that only mentions the issue ("Part of #N") but names its tracker key
+            # moves the tracker issue to Done on merge, and the tracker's GitHub sync then
+            # closes this issue with no closer. A merged PR that mentions the issue and
+            # merged up to 5 minutes before the closure is that change.
+            # shellcheck disable=SC2016  # "$owner" etc. are GraphQL variables
+            merged_near=$(gh api graphql \
+              -f query='query($owner: String!, $name: String!, $number: Int!) {
+                repository(owner: $owner, name: $name) { issue(number: $number) {
+                  timelineItems(itemTypes: CROSS_REFERENCED_EVENT, last: 50) { nodes { ... on CrossReferencedEvent {
+                    source { ... on PullRequest { merged mergedAt } } } } } } } }' \
+              -f owner="${REPO%%/*}" -f name="${REPO#*/}" -F number="$NUMBER" |
+              jq -r --arg closed "$CLOSED_AT" '[.data.repository.issue.timelineItems.nodes[].source
+                | select(.merged == true and .mergedAt != null)
+                | (($closed | fromdateiso8601) - (.mergedAt | fromdateiso8601))
+                | select(. >= 0 and . <= 300)] | length')
+            if [ "${merged_near:-0}" -gt 0 ]; then
+              echo "ok: closed right after a merged pull request that mentions it"
+              exit 0
+            fi
+          fi
+
+          # A comment by the closer from 30 minutes before the closure up to now counts,
+          # so "Close with comment" and "comment, then close" both pass.
+          since=$(date -u -d "$CLOSED_AT - 30 minutes" +%Y-%m-%dT%H:%M:%SZ)
+          count=$(gh api "repos/$REPO/issues/$NUMBER/comments?since=$since&per_page=100" --paginate \
+            --jq "[.[] | select(.user.login == \"$CLOSER\" and (.body | gsub(\"\\\\s\"; \"\") | length) >= 10)] | length" \
+            | awk '{s += $1} END {print s + 0}')
+          if [ "$count" -gt 0 ]; then
+            echo "ok: $CLOSER commented"
+            exit 0
+          fi
+
+          what="issue"; [ "$KIND" = "pr" ] && what="pull request"
+          msg="@$CLOSER this $what was closed without a comment, so it has been reopened.
+
+          Please comment with the outcome, then close it again:
+          - **Done:** what was done and where (PR, commit), with the proof.
+          - **Not doing it:** why (won't fix, duplicate of #N, out of scope).
+          - **Findings:** anything learned that the next person needs.
+
+          Setting the tracker issue to Done, Canceled or Duplicate closes this issue too:
+          comment here first.
+
+          See ${GUIDE:-CONTRIBUTING.md}."
+
+          if [ "$KIND" = "pr" ]; then
+            gh pr reopen "$NUMBER" -R "$REPO"
+          else
+            gh issue reopen "$NUMBER" -R "$REPO"
+          fi
+          gh issue comment "$NUMBER" -R "$REPO" --body "$msg"
+          echo "reopened $what #$NUMBER"
