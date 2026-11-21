@@ -124,6 +124,16 @@ jobs:
 
           See ${GUIDE:-CONTRIBUTING.md}."
 
+          # Skip a superseded event, checked right before the reopen: if the item was reopened,
+          # or closed again, since this closure, a newer run owns the newer state. Without this,
+          # a delayed run could reopen someone else's valid closure. A closure in the second
+          # between this read and the reopen is not covered; its own run then asks again.
+          current=$(gh api "repos/$REPO/issues/$NUMBER" --jq '[.state, (.closed_at // "")] | join(" ")')
+          if [ "$current" != "closed $CLOSED_AT" ]; then
+            echo "skip: state is now '$current', not the closure at $CLOSED_AT"
+            exit 0
+          fi
+
           if [ "$KIND" = "pr" ]; then
             gh pr reopen "$NUMBER" -R "$REPO"
           else
