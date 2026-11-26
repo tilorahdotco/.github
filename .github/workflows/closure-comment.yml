@@ -15,7 +15,7 @@ on:
   workflow_call:
     inputs:
       runner:
-        description: Runner label. Empty uses the LIGHT_RUNNER variable, then instabox-small. Public repositories must pass a GitHub-hosted runner.
+        description: Runner label. Empty uses the LIGHT_RUNNER variable, then ubuntu-latest. Public repositories must pass a GitHub-hosted runner.
         type: string
         default: ''
       contributing-link:
@@ -37,7 +37,7 @@ jobs:
     # pull_request or pull_request_target: public repositories use pull_request_target so a
     # fork PR's closure gets a write token. No code is checked out, so that is safe.
     if: github.event_name == 'issues' || github.event.pull_request.merged == false
-    runs-on: ${{ inputs.runner || vars.LIGHT_RUNNER || 'instabox-small' }}
+    runs-on: ${{ inputs.runner || vars.LIGHT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
       - name: Require a closing comment

@@ -16,7 +16,7 @@ on:
         default: ""
       runner:
         type: string
-        default: instabox-medium
+        default: ubuntu-latest
       timeout-minutes:
         type: number
         default: 10

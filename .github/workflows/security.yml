@@ -10,7 +10,7 @@ on:
     inputs:
       runner:
         type: string
-        default: instabox-medium
+        default: ubuntu-latest
       secret-scan:
         type: boolean
         default: true

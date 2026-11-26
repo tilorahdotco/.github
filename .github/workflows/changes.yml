@@ -21,7 +21,7 @@ on:
           .github/pull_request_template.md
       runner:
         type: string
-        default: instabox-medium
+        default: ubuntu-latest
     outputs:
       code:
         description: '"true" when at least one changed file is not ignored.'

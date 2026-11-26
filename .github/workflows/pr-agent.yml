@@ -28,7 +28,7 @@ on:
       runner:
         description: Runner label. Public repositories must use a GitHub-hosted runner.
         type: string
-        default: instabox-small
+        default: ubuntu-latest
       timeout-minutes:
         type: number
         default: 15
