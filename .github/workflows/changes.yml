@@ -20,8 +20,9 @@ on:
           .github/ISSUE_TEMPLATE/**
           .github/pull_request_template.md
       runner:
+        description: Runner label. Default is the free self-hosted cjbb2-ci runner. Public repositories must pass a GitHub-hosted runner.
         type: string
-        default: instabox-medium
+        default: cjbb2-ci
     outputs:
       code:
         description: '"true" when at least one changed file is not ignored.'
