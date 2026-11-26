@@ -21,12 +21,13 @@ jobs:
 | `deploy-cpanel.yml` | Job `Deploy` (cPanel Git pull), then `Verify live` (HTTP 200 and byte compare). | `trigger`, `cpanel-repo`, `branch`, `host` (required), `verify-url`, `live-base-url`, `live-files`, `runner` | `CPANEL_USER`, `CPANEL_PASSWORD` |
 | `deploy-cloudflare.yml` | Job `Build`, then `Deploy` (wrangler) from the built artifact. Manual release only. | `node-version`, `install`, `build`, `check`, `wrangler-version`, `command`, `runner` | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
 | `pr-agent.yml` | Job `PR-Agent`: AI review of each PR with PR-Agent on Claude (Opus 5.5 reviews, Haiku 5.5 for `/ask` and `/improve`), and `/review`, `/improve`, `/ask` comments. No stored key: it exchanges GitHub's identity token for a 15-minute Anthropic token. | `runner`, `timeout-minutes` | none |
-| `closure-comment.yml` | Job `Closure needs a comment`: reopens an issue, or an unmerged PR, closed without a closer comment of 10 or more characters. Skips bots, closes by a merged PR or commit, and a tracker sync within 5 minutes after a merged PR. Caller triggers: `issues: [closed]` and `pull_request: [closed]` (`pull_request_target: [closed]` in public repositories, so fork PRs get a write token), with `issues: write`, `pull-requests: write`, `contents: read`. | `runner` (default `vars.LIGHT_RUNNER`, then `ubuntu-latest`), `contributing-link`, `timeout-minutes` | none |
+| `closure-comment.yml` | Job `Closure needs a comment`: reopens an issue, or an unmerged PR, closed without a closer comment of 10 or more characters. Skips bots, closes by a merged PR or commit, and a tracker sync within 5 minutes after a merged PR. Caller triggers: `issues: [closed]` and `pull_request: [closed]` (`pull_request_target: [closed]` in public repositories, so fork PRs get a write token), with `issues: write`, `pull-requests: write`, `contents: read`. | `runner` (default `vars.LIGHT_RUNNER`, then `cjbb2-ci`), `contributing-link`, `timeout-minutes` | none |
 
 Rules:
 - Pin every `uses:` to a full commit SHA. Dependabot keeps the pins in this repository current. The one exception is `pr-agent.yml`, which callers use at `@main` (see PR-Agent review).
 - Callers own triggers, concurrency and job names.
-- Public repositories run on GitHub-hosted runners only.
+- Public repositories run on GitHub-hosted runners only: pass `runner: ubuntu-latest`.
+- Default runners: `node-ci.yml`, `links.yml`, `changes.yml`, `security.yml` and `closure-comment.yml` default to the free self-hosted `cjbb2-ci` runner (no Docker, no sudo). `pr-agent.yml` (Docker), `deploy-cpanel.yml` and `deploy-cloudflare.yml` (secrets, deploy) default to GitHub-hosted `ubuntu-latest`. A job that reads a secret other than `GITHUB_TOKEN`, uses Docker, `container:` or `services:`, runs `sudo` or apt, or deploys stays on `ubuntu-latest`.
 - Keep secrets at the organization level, limited to the repositories that use them.
 
 ## Workflow shape
@@ -131,7 +132,7 @@ jobs:
     name: CI gate
     needs: [changes, ci, security]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: cjbb2-ci
     timeout-minutes: 2
     steps:
       - name: Check results
@@ -158,7 +159,7 @@ jobs:
     name: Announce
     needs: [gate, deploy]
     if: always() && needs.gate.result != 'skipped'
-    runs-on: ubuntu-latest
+    runs-on: cjbb2-ci
     timeout-minutes: 2
     steps:
       - name: Write run summary
@@ -237,6 +238,6 @@ jobs:
 - A fork PR gets no automatic review. A maintainer's `/review` comment on it runs
   from the default branch and reviews it; PR-Agent reads the diff and runs no PR code.
 - The PR-Agent image is pinned by digest in the org action `actions/pr-agent`, which the workflow pins by commit. Use a runner with Docker:
-  GitHub-hosted (`ubuntu-latest`), not the `cjbb2-ci` fallback runner.
+  GitHub-hosted (`ubuntu-latest`), not the `cjbb2-ci` runner, which has no Docker.
 - A failed exchange fails the job with Anthropic's error type. The deny reason is
   in the Claude Console under Workload identity, History.
