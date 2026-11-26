@@ -27,7 +27,7 @@ Rules:
 - Pin every `uses:` to a full commit SHA. Dependabot keeps the pins in this repository current. The one exception is `pr-agent.yml`, which callers use at `@main` (see PR-Agent review).
 - Callers own triggers, concurrency and job names.
 - Public repositories run on GitHub-hosted runners only: pass `runner: ubuntu-latest`.
-- Default runners: `node-ci.yml`, `links.yml`, `changes.yml`, `security.yml` and `closure-comment.yml` default to the free self-hosted `cjbb2-ci` runner (no Docker, no sudo). `pr-agent.yml` (Docker), `deploy-cpanel.yml` and `deploy-cloudflare.yml` (secrets, deploy) default to GitHub-hosted `ubuntu-latest`. A job that reads a secret other than `GITHUB_TOKEN`, uses Docker, `container:` or `services:`, runs `sudo` or apt, or deploys stays on `ubuntu-latest`.
+- Default runners: `node-ci.yml`, `links.yml`, `changes.yml`, `security.yml` and `closure-comment.yml` default to the free self-hosted `cjbb2-ci` runner (no Docker, no sudo). `pr-agent.yml` (Docker, no stored secrets) defaults to `'["self-hosted", "cjbb-docker"]'` (ephemeral Docker-capable self-hosted runner on cjbb, private repositories only; public repositories must pass `runner: ubuntu-latest`). `deploy-cpanel.yml` and `deploy-cloudflare.yml` (secrets, deploy) default to GitHub-hosted `ubuntu-latest`. A job that reads a secret other than `GITHUB_TOKEN`, runs `sudo` or apt, or deploys stays on `ubuntu-latest`.
 - Keep secrets at the organization level, limited to the repositories that use them.
 
 ## Workflow shape
@@ -220,8 +220,8 @@ jobs:
     # again: drafts, fork PRs, the author's write access and `--config.` arguments.
     if: github.event_name == 'pull_request' || (github.event.issue.pull_request && (startsWith(github.event.comment.body, '/review') || startsWith(github.event.comment.body, '/ask') || startsWith(github.event.comment.body, '/improve')))
     uses: tilorahdotco/.github/.github/workflows/pr-agent.yml@main
-    with:
-      runner: ubuntu-latest
+    # Uses the default ["self-hosted", "cjbb-docker"] runner (private repos only).
+    # Public repositories must pass `with: { runner: ubuntu-latest }`.
 ```
 
 - A repository that requires SHA pins (intersects) cannot use `@main`. It pins the
@@ -238,6 +238,6 @@ jobs:
 - A fork PR gets no automatic review. A maintainer's `/review` comment on it runs
   from the default branch and reviews it; PR-Agent reads the diff and runs no PR code.
 - The PR-Agent image is pinned by digest in the org action `actions/pr-agent`, which the workflow pins by commit. Use a runner with Docker:
-  GitHub-hosted (`ubuntu-latest`), not the `cjbb2-ci` runner, which has no Docker.
+  the default `["self-hosted", "cjbb-docker"]` runner for private repositories, or GitHub-hosted (`ubuntu-latest`) for public repositories, not the `cjbb2-ci` runner, which has no Docker.
 - A failed exchange fails the job with Anthropic's error type. The deny reason is
   in the Claude Console under Workload identity, History.

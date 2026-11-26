@@ -26,9 +26,9 @@ on:
   workflow_call:
     inputs:
       runner:
-        description: Runner label. Public repositories must use a GitHub-hosted runner.
+        description: Runner label or JSON array of labels. Public repositories must use a GitHub-hosted runner (for example ubuntu-latest).
         type: string
-        default: ubuntu-latest
+        default: '["self-hosted", "cjbb-docker"]'
       timeout-minutes:
         type: number
         default: 15
@@ -50,7 +50,7 @@ jobs:
           || startsWith(github.event.comment.body, '/improve'))
         && !contains(github.event.comment.body, '--config.')
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ startsWith(inputs.runner, '[') && fromJSON(inputs.runner) || inputs.runner }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
       contents: read
