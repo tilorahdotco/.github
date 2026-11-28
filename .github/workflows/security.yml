@@ -4,10 +4,12 @@ name: Security
 #   Secret scan | Dependency audit
 # The gitleaks CLI is MIT licensed; the gitleaks GitHub Action needs a paid
 # license for organizations, so this workflow downloads the pinned binary.
-# On pull_request it scans only the PR commits; otherwise the full history of
-# the checked-out commit. Not every branch: with fetch-depth 0 the checkout
-# holds every remote branch, and gitleaks' default (`git log --all`) would fail
-# a push to main on a test fixture in someone's open feature branch.
+# On pull_request it scans only the PR commits. On push and workflow_dispatch
+# it scans the full history of the checked-out commit, not every branch: with
+# fetch-depth 0 the checkout holds every remote branch, and gitleaks' default
+# (`git log --all`) would fail a push to main on a test fixture in someone's
+# open feature branch. The weekly schedule still scans every branch, as a
+# backstop for a branch that never opens a PR.
 on:
   workflow_call:
     inputs:
@@ -78,9 +80,11 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
           range=(--log-opts=HEAD)
+          if [ "$EVENT" = schedule ]; then range=(--log-opts=--all); fi
           if [ -n "$BASE_SHA" ]; then range=(--log-opts="${BASE_SHA}..${HEAD_SHA}"); fi
           "$RUNNER_TEMP/gitleaks" git --redact --no-banner --verbose "${range[@]}" .
 
