@@ -17,7 +17,7 @@ jobs:
 | `node-ci.yml` | Jobs `Install`, then parallel `Lint`, `Typecheck`, `Test`, then `Build`. Empty input skips that job. | `node-version`, `package-manager`, `working-directory`, `install`, `lint`, `typecheck`, `test`, `build`, `runner` | none |
 | `links.yml` | Link check with lychee. | `args`, `root-dir`, `runner` | none |
 | `changes.yml` | Job `Changes`. Output `code` is `true` unless only ignored files changed. | `ignore`, `runner` | none |
-| `security.yml` | Parallel jobs `Secret scan` (gitleaks CLI) and `Dependency audit`. | `secret-scan`, `audit`, `audit-level`, `working-directory`, `runner` | none |
+| `security.yml` | Parallel jobs `Secret scan` (gitleaks CLI: the PR commits on a pull request, on push and manual runs the history of the checked-out commit, on the weekly schedule every branch) and `Dependency audit`. | `secret-scan`, `audit`, `audit-level`, `working-directory`, `runner` | none |
 | `deploy-cpanel.yml` | Job `Deploy` (cPanel Git pull), then `Verify live` (HTTP 200 and byte compare). | `trigger`, `cpanel-repo`, `branch`, `host` (required), `verify-url`, `live-base-url`, `live-files`, `runner` | `CPANEL_USER`, `CPANEL_PASSWORD` |
 | `deploy-cloudflare.yml` | Job `Build`, then `Deploy` (wrangler) from the built artifact. Manual release only. | `node-version`, `install`, `build`, `check`, `wrangler-version`, `command`, `runner` | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
 | `pr-agent.yml` | Job `PR-Agent`: AI review of each PR with PR-Agent on Claude (Opus 5.5 reviews, Haiku 5.5 for `/ask` and `/improve`), and `/review`, `/improve`, `/ask` comments. No stored key: it exchanges GitHub's identity token for a 15-minute Anthropic token. | `runner`, `timeout-minutes` | none |
